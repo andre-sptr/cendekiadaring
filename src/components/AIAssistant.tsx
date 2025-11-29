@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Bot, X, Send, Sparkles } from 'lucide-react';
-import { toast } from 'sonner';
+import { getGeminiResponse } from '@/lib/gemini'; // Import fungsi AI
 
 interface Message {
   role: 'user' | 'assistant';
@@ -16,34 +16,46 @@ export function AIAssistant() {
   const [messages, setMessages] = useState<Message[]>([
     {
       role: 'assistant',
-      content: 'Halo! 👋 Saya asisten AI EduVerseX Pro. Saya siap membantu Anda dalam pembelajaran. Tanya apa saja tentang buku, materi pelajaran, atau bantuan belajar!'
+      content: 'Halo! 👋 Saya asisten AI EduVerseX Pro. Saya siap membantu Anda. Tanya saya tentang rekomendasi buku atau materi pelajaran!'
     }
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Ref untuk auto-scroll ke pesan terbaru
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isOpen]);
 
   const handleSend = async () => {
     if (!input.trim()) return;
 
     const userMessage = input.trim();
     setInput('');
+    
+    // 1. Tambahkan pesan user ke UI
     setMessages(prev => [...prev, { role: 'user', content: userMessage }]);
     setIsLoading(true);
 
-    // Simulate AI response (replace with actual AI integration later)
-    setTimeout(() => {
-      const responses = [
-        'Saya akan dengan senang hati membantu Anda memahami topik tersebut! Bisakah Anda memberikan lebih detail?',
-        'Pertanyaan yang bagus! Berdasarkan materi yang ada, saya bisa menjelaskan...',
-        'Untuk menjawab pertanyaan Anda, mari kita lihat konsep dasarnya terlebih dahulu.',
-        'Saya bisa membuatkan ringkasan atau soal latihan untuk membantu pemahaman Anda!',
-        'Topik ini berkaitan dengan beberapa konsep penting. Apakah Anda ingin saya jelaskan lebih detail?'
-      ];
-      
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-      setMessages(prev => [...prev, { role: 'assistant', content: randomResponse }]);
+    try {
+      // 2. Panggil API Gemini dengan history chat yang ada
+      // Kita kirim pesan sebelumnya (kecuali pesan terakhir yang baru ditambah)
+      const aiResponseText = await getGeminiResponse(messages, userMessage);
+
+      // 3. Tambahkan balasan AI ke UI
+      setMessages(prev => [...prev, { role: 'assistant', content: aiResponseText }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { 
+        role: 'assistant', 
+        content: 'Maaf, terjadi kesalahan saat menghubungi server AI.' 
+      }]);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (
@@ -70,7 +82,7 @@ export function AIAssistant() {
               </div>
               <div>
                 <h3 className="font-semibold text-white">AI Assistant</h3>
-                <p className="text-xs text-white/80">Siap membantu belajar Anda</p>
+                <p className="text-xs text-white/80">Powered by Gemini</p>
               </div>
             </div>
           </div>
@@ -83,13 +95,14 @@ export function AIAssistant() {
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                    className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm leading-relaxed ${
                       message.role === 'user'
                         ? 'bg-gradient-primary text-white'
                         : 'bg-muted text-foreground'
                     }`}
                   >
-                    <p className="text-sm">{message.content}</p>
+                    {/* Render Markdown sederhana jika diperlukan, untuk sekarang text biasa */}
+                    <p className="whitespace-pre-wrap">{message.content}</p>
                   </div>
                 </div>
               ))}
@@ -104,6 +117,7 @@ export function AIAssistant() {
                   </div>
                 </div>
               )}
+              <div ref={scrollRef} />
             </div>
           </ScrollArea>
 
@@ -118,8 +132,9 @@ export function AIAssistant() {
               <Input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ketik pertanyaan Anda..."
-                className="flex-1 bg-muted/50"
+                placeholder="Tanya tentang buku atau pelajaran..."
+                className="flex-1 bg-muted/50 focus-visible:ring-primary"
+                disabled={isLoading}
               />
               <Button 
                 type="submit" 
